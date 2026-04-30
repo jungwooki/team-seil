@@ -50,11 +50,11 @@
     import {
       Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
       BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
-      ScatterChart, Scatter, ZAxis, LineChart, Line, ComposedChart
+      ScatterChart, Scatter, ZAxis, LineChart, Line, ComposedChart, ReferenceLine
     } from 'recharts';
 
     // ==========================================
-    // ⚠️ 100% 엑셀 원본 리얼 데이터 (21명 전원)
+    // ⚠️ 100% 엑셀 원본 리얼 데이터 (21명 전원 누락 없음)
     // ==========================================
     const TEAMS = ['서울세일중학교'];
     
@@ -243,12 +243,23 @@
           p.physical.riskLevel.fatigueRisk === '위험'
         );
 
-        const scatterData = dashboardData.map((p, index) => ({
-          name: p.name,
-          boneAgeDecimal: p.growth.boneAgeDecimal,
-          yPos: (index % 5) + 1, 
-          boneAgeText: `${p.growth.boneAgeYear}년 ${p.growth.boneAgeMonth}월`
-        }));
+        // 산점도 겹침 방지 (Y축 위치 분산 알고리즘)
+        const sortedDashboardData = [...dashboardData].sort((a,b) => a.growth.boneAgeDecimal - b.growth.boneAgeDecimal);
+        const scatterData = sortedDashboardData.map((p, i, arr) => {
+          const sameX = arr.filter(other => other.growth.boneAgeDecimal === p.growth.boneAgeDecimal);
+          const yPosIndex = sameX.findIndex(other => other.playerId === p.playerId);
+          const total = sameX.length;
+          const spacing = 1.2;
+          const startY = 3 - ((total - 1) * spacing) / 2;
+          const yPos = startY + yPosIndex * spacing;
+
+          return {
+            name: p.name,
+            boneAgeDecimal: p.growth.boneAgeDecimal,
+            yPos: yPos,
+            boneAgeText: `${p.growth.boneAgeYear}년 ${p.growth.boneAgeMonth}월`
+          };
+        });
 
         return {
           mental: {
@@ -313,7 +324,7 @@
         if (!currentPlayer || !teamStats) return [];
         return [
           { subject: '수행불안(경기긴장)', player: currentPlayer.mental.tension, teamAvg: teamStats.mental.tension },
-          { subject: '사회적지지(주변도움활용능력)', player: currentPlayer.mental.support, teamAvg: teamStats.mental.support },
+          { subject: '사회적지지(주변도움활용)', player: currentPlayer.mental.support, teamAvg: teamStats.mental.support },
           { subject: '경기준비능력(위닝멘탈리티)', player: currentPlayer.mental.prep, teamAvg: teamStats.mental.prep },
           { subject: '실수후 회복력', player: currentPlayer.mental.recovery, teamAvg: teamStats.mental.recovery },
           { subject: '자기조절 집중력', player: currentPlayer.mental.focus, teamAvg: teamStats.mental.focus },
@@ -333,13 +344,21 @@
         return 'text-[#10b981] font-bold';
       };
 
+      // 뼈나이 차트 툴팁 (평균 대비 격차 표시 포함)
       const ScatterTooltip = ({ active, payload }) => {
         if (active && payload && payload.length) {
           const data = payload[0].payload;
+          const diff = (data.boneAgeDecimal - teamStats.growth.avgBoneAge).toFixed(1);
+          const diffText = diff > 0 ? `+${diff}년` : diff < 0 ? `${diff}년` : `0년`;
+          const diffColor = diff > 0 ? 'text-[#e30613]' : diff < 0 ? 'text-[#10b981]' : 'text-slate-300';
+          
           return (
             <div className="bg-[#0b1c2d] text-white p-3 rounded-lg shadow-xl border border-slate-700 z-[100]">
               <p className="font-black text-sm mb-1">{data.name}</p>
               <p className="text-xs text-[#fbbc04]">뼈나이: {data.boneAgeText}</p>
+              <p className="text-xs text-slate-300 mt-1">
+                팀 평균 대비: <span className={`font-bold ${diffColor}`}>{diffText}</span>
+              </p>
             </div>
           );
         }
@@ -434,7 +453,7 @@
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full">
                   <div className="bg-[#0b1c2d] p-4 text-center">
                     <h3 className="text-lg font-black text-white">중등부 1학년 (U13)</h3>
-                    <p className="text-xs text-[#fbbc04] font-bold">2012~2013년생 대상 (전체 21명)</p>
+                    <p className="text-xs text-[#fbbc04] font-bold">전체 21명 대상 리포트</p>
                   </div>
                   <div className="p-6 space-y-4 flex-1 bg-slate-50">
                     {REPORT_ARCHIVE.grade1.map(report => (
@@ -527,7 +546,7 @@
                       <ResponsiveContainer width="100%" height="100%">
                         <RadarChart cx="50%" cy="50%" outerRadius="60%" data={playerRadarData}>
                           <PolarGrid stroke="#e2e8f0" />
-                          <PolarAngleAxis dataKey="subject" tick={{ fill: '#475569', fontSize: 11, fontWeight: 'bold' }} />
+                          <PolarAngleAxis dataKey="subject" tick={{ fill: '#475569', fontSize: 10, fontWeight: 'bold' }} />
                           <PolarRadiusAxis angle={30} domain={[0, 6]} tick={{ fill: '#94a3b8' }} />
                           <RechartsTooltip />
                           <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingTop: '10px' }} />
@@ -721,7 +740,7 @@
                       <ResponsiveContainer width="100%" height="100%">
                         <RadarChart cx="50%" cy="50%" outerRadius="60%" data={[
                           { subject: '수행불안(경기긴장)', team: teamStats.mental.tension, netherlands: 3.61 },
-                          { subject: '사회적지지(주변도움활용능력)', team: teamStats.mental.support, netherlands: 4.37 },
+                          { subject: '사회적지지(주변도움활용)', team: teamStats.mental.support, netherlands: 4.37 },
                           { subject: '경기준비능력(위닝멘탈리티)', team: teamStats.mental.prep, netherlands: 4.10 },
                           { subject: '실수후 회복력', team: teamStats.mental.recovery, netherlands: 4.14 },
                           { subject: '자기조절 집중력', team: teamStats.mental.focus, netherlands: 4.21 },
@@ -778,7 +797,7 @@
                   <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[400px]">
                     <div className="flex items-center justify-between mb-4 shrink-0">
                       <h3 className="text-base font-black text-[#0b1c2d] flex items-center">
-                        <Bone className="w-5 h-5 mr-2 text-[#fbbc04]" /> 성장 속도 스펙트럼 (전체)
+                        <Bone className="w-5 h-5 mr-2 text-[#fbbc04]" /> 성장 속도 스펙트럼 (전체 21명)
                       </h3>
                     </div>
                     
@@ -792,18 +811,19 @@
                         <ResponsiveContainer width="100%" height="100%">
                           <ScatterChart margin={{ top: 20, right: 20, bottom: 0, left: -20 }}>
                             <XAxis 
-                              type="number" dataKey="boneAgeDecimal" domain={['dataMin - 0.5', 'dataMax + 0.5']} 
+                              type="number" dataKey="boneAgeDecimal" domain={['dataMin - 1', 'dataMax + 1']} 
                               tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={(val) => `${val.toFixed(1)}세`}
                               name="뼈나이" axisLine={true} tickLine={false}
                             />
                             <YAxis type="number" dataKey="yPos" hide domain={[0, 6]} />
                             <ZAxis type="number" range={[150, 150]} /> 
                             <RechartsTooltip cursor={{ strokeDasharray: '3 3' }} content={<ScatterTooltip />} />
+                            <ReferenceLine x={teamStats.growth.avgBoneAge} stroke="#e30613" strokeDasharray="3 3" strokeOpacity={0.5} label={{ position: 'top', value: '팀 평균', fill: '#e30613', fontSize: 10, fontWeight: 'bold' }} />
                             <Scatter name="선수" data={teamStats.growth.scatterData} fill="#3b82f6" fillOpacity={0.7} />
                           </ScatterChart>
                         </ResponsiveContainer>
                       </div>
-                      <div className="text-center text-[10px] text-slate-400 font-bold mt-2 shrink-0">점을 터치하거나 마우스를 올리세요</div>
+                      <div className="text-center text-[10px] text-slate-400 font-bold mt-2 shrink-0">점을 터치하여 팀 평균 대비 뼈나이 격차를 확인하세요</div>
                     </div>
                   </div>
 
@@ -828,8 +848,8 @@
                           <>
                             <SortableHeader label="MGI (장기적 성장 가능성)" sortKey="mental.mgi" infoContent="장기적 성장 가능성 멘탈 점수 (Mental Growth Index)" className="text-center bg-indigo-50 border-r border-slate-200" />
                             <SortableHeader label="수행불안(경기긴장)" sortKey="mental.tension" className="text-center" />
-                            <SortableHeader label="사회적지지(주변도움활용능력)" sortKey="mental.support" className="text-center" />
-                            <SortableHeader label="경기준비능력(위닝멘탈리티)" sortKey="mental.prep" className="text-center" />
+                            <SortableHeader label="사회적지지(주변도움)" sortKey="mental.support" className="text-center" />
+                            <SortableHeader label="경기준비(위닝멘탈리티)" sortKey="mental.prep" className="text-center" />
                             <SortableHeader label="실수후 회복력" sortKey="mental.recovery" className="text-center" />
                             <SortableHeader label="자기조절 집중력" sortKey="mental.focus" className="text-center" />
                             <SortableHeader label="경기 안정성" sortKey="mental.stability" className="text-center" />
@@ -841,20 +861,21 @@
                           <>
                             <SortableHeader label="체중(kg)" sortKey="weight" className="text-right" />
                             <SortableHeader label="체지방률(%)" sortKey="physical.fat" className="text-right" />
-                            <SortableHeader label="ECW-Ratio" sortKey="physical.ecw" infoContent="세포 외 수분 비율. 0.386 이상 주의, 0.390 이상 위험(RED-S)" className="text-right border-r border-slate-200" />
+                            <SortableHeader label="ECW-Ratio" sortKey="physical.ecw" infoContent={'ECW-Ratio\n상대적 과부하정도'} className="text-right border-r border-slate-200" />
                             
                             <th colSpan="5" className="px-3 py-2.5 text-center font-bold text-slate-700 bg-blue-50/50 text-xs border-r border-slate-200">
-                              자율신경 (HRV) 지표
-                              <InfoTooltip content="심박변이도 측정을 통한 신경계 회복 및 피로도 상태입니다." />
+                              자율신경지표 (음평양비陰平陽秘)
+                              <InfoTooltip content="자율신경계 측정을 통한 신경계 회복 및 피로도 상태입니다." />
                             </th>
 
                             <th colSpan="3" className="px-3 py-2.5 text-center font-bold text-slate-700 bg-purple-50/50 text-xs border-r border-slate-200">
-                              초음파 판독 (근골격계)
+                              부상위험도 (초음파평가 - 동적평형亢害承制)
                             </th>
 
-                            <SortableHeader label="RED-S 위험" sortKey="physical.riskLevel.redSRisk" infoContent="상대적 에너지 결핍 상태 위험도 (ECW 기반)" className="text-center bg-[#e30613]/5" />
-                            <SortableHeader label="신체부하 위험" sortKey="physical.riskLevel.phyLoadRisk" infoContent="구조적 부하 위험 (초음파 위험 기반)" className="text-center bg-[#e30613]/5" />
-                            <SortableHeader label="피로 위험" sortKey="physical.riskLevel.fatigueRisk" infoContent="중추신경 피로 누적도 (RMSSD 기반)" className="text-center bg-[#e30613]/5 border-r border-slate-200" />
+                            <th colSpan="3" className="px-3 py-2.5 text-center font-bold text-[#e30613] bg-[#e30613]/10 text-xs border-r border-slate-200">
+                              컨디션 (허증虛症)
+                              <InfoTooltip content="신체의 에너지가 고갈되어 나타나는 피로 및 과부하 위험 상태입니다." />
+                            </th>
                           </>
                         )}
 
@@ -878,10 +899,10 @@
                           <th></th><th></th><th></th><th className="border-r border-slate-200"></th>
 
                           {/* HRV Subheaders */}
-                          <SortableHeader label="SDNN(만성)" sortKey="physical.hrv.sdnn" className="text-center text-[10px] text-slate-500 bg-blue-50/20 border-t border-slate-100" />
-                          <SortableHeader label="RMSSD(급성)" sortKey="physical.hrv.rmssd" className="text-center text-[10px] text-slate-500 bg-blue-50/20 border-t border-slate-100" />
-                          <SortableHeader label="LF(교감)" sortKey="physical.hrv.lf" className="text-center text-[10px] text-slate-500 bg-blue-50/20 border-t border-slate-100" />
-                          <SortableHeader label="HF(부교감)" sortKey="physical.hrv.hf" className="text-center text-[10px] text-slate-500 bg-blue-50/20 border-t border-slate-100" />
+                          <SortableHeader label="SDNN(만성)" sortKey="physical.hrv.sdnn" infoContent={'SDNN\n만성피로도 (누적)'} className="text-center text-[10px] text-slate-500 bg-blue-50/20 border-t border-slate-100" />
+                          <SortableHeader label="RMSSD(급성)" sortKey="physical.hrv.rmssd" infoContent={'RMSSD\n급성피로도 (지금당장)'} className="text-center text-[10px] text-slate-500 bg-blue-50/20 border-t border-slate-100" />
+                          <SortableHeader label="LF(교감)" sortKey="physical.hrv.lf" infoContent={'LF\n교감신경(긴장, 예민, 스트레스)'} className="text-center text-[10px] text-slate-500 bg-blue-50/20 border-t border-slate-100" />
+                          <SortableHeader label="HF(부교감)" sortKey="physical.hrv.hf" infoContent={'HF\n부교감신경(이완, 무기력)'} className="text-center text-[10px] text-slate-500 bg-blue-50/20 border-t border-slate-100" />
                           <SortableHeader label="스트레스 지수" sortKey="physical.hrv.stress" className="text-center text-[10px] text-slate-500 bg-blue-50/20 border-t border-slate-100 border-r border-slate-200" />
 
                           {/* 초음파 Subheaders */}
@@ -889,7 +910,10 @@
                           <th className="px-3 py-1.5 text-center text-[10px] text-slate-500 bg-purple-50/20 font-semibold border-t border-slate-100">무릎(슬개건)</th>
                           <th className="px-3 py-1.5 text-center text-[10px] text-slate-500 bg-purple-50/20 font-semibold border-t border-slate-100 border-r border-slate-200">발바닥(족저)</th>
 
-                          <th></th><th></th><th className="border-r border-slate-200"></th>
+                          {/* 허증 Subheaders */}
+                          <SortableHeader label="RED-S" sortKey="physical.riskLevel.redSRisk" infoContent={'RED-S\n(상대적에너지결핍-성장방해)'} className="text-center text-[10px] text-[#e30613] bg-[#e30613]/5 border-t border-slate-100" />
+                          <SortableHeader label="신체부하" sortKey="physical.riskLevel.phyLoadRisk" infoContent={'신체부하위험\n(상대적 과운동 과부하)'} className="text-center text-[10px] text-[#e30613] bg-[#e30613]/5 border-t border-slate-100" />
+                          <SortableHeader label="피로위험" sortKey="physical.riskLevel.fatigueRisk" infoContent={'피로 위험\n(번아웃 위험)'} className="text-center text-[10px] text-[#e30613] bg-[#e30613]/5 border-t border-slate-100 border-r border-slate-200" />
                         </tr>
                       )}
                     </thead>
